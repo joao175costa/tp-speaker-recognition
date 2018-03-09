@@ -1,0 +1,30 @@
+Look, Listen and Learn — A Multimodal LSTM for Speaker Identification
+    Identify who is speaking in a video
+    Multimodal LSTM, some weight sharing between faces and sound
+        faces: CNN architecture
+        sound: MFCC
+
+Advances in deep neural network approaches to speaker recognition
+    DNN can be used to:
+        extract features
+            trained for speech recognition: predict senone posteriors
+            bottleneck layer: reduce nodes in hidden layer and use them as features + MFCC
+        feature modelling
+
+Deep Neural Network Approaches to Speaker and Language Recognition
+    DNN used as:
+        direct: classifier for recognition task
+        indirect: DNN trained for other purpose used to extract data used to train 
+            frame level features
+            accumulate multinomial or gaussian vector
+            multimodel statistics to train i vector
+    DNN classifier
+        multilayer perceptron with 2+ hidden layers
+        input: stacked set of spectral feats.
+            MFCC
+            PLP
+            short 20ms frames of speech
+            context of +/-5 to 10 frames around curent input
+        output: predition of posterior prob. of target classes of input frame
+    bottleneck: use hidden layer activation as feature vetor
+    

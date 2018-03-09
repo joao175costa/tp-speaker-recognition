@@ -1,0 +1,145 @@
+speech recognition: naïve, forensic, automatic
+tasks:
+    identification - identify unknown speaker from a set of known speakers
+        closed/in-set - all speakers of a set are known
+        open/out-of-set - can be outside from group: universal background model (UBM) is necessary
+    verification - unknown speaker claims identity, verify if claim is true
+        compare 2 samples and decide if they are from same speaker
+            compare unk. sample to 2 alternative models
+                speaker model
+                world model
+text dependant / text independant
+---
+human speech: performance biometric - how speech is spoken, not is what is said
+large degree of variability: style shifting/intraspeaker variability
+recording/transmission aggravates this
+
+sources of variability
+    speaker based:
+        situational stress
+        vocal effort
+        emotion
+        physiological
+        disguise
+    conversation based:
+        human-human:
+            -language/dialect
+            -read, spontaneous,...
+            -monologue, public speech
+        human-machine;
+            -prompted
+            -voice input for telephone/...
+    technology/external based:
+        electromechanical
+        environmental
+        data quality
+---
+FEATURES:
+ideal properties:
+    high between speaker variability and low within speaker variability
+    resistant to disguise or mimicry
+    high frequency of ocurrence in relevant materials
+    robust in transmission
+    easy to extract and measure
+Auditory: can be heard and objectively described
+    utterance of specific sounds
+Acoustic: mathematically derived from speech signal
+    fundamental frequency, bandwidth
+Linguistic: across languages or dialects
+    phonological, morphological, syntactic
+Non-linguistic: features not related to speech content
+    speech quality, fluency, pauses, speaking rate, av. frequency, non speech sounds
+Short term: short time span, segmental
+Long term: averaged parameters, utterance level
+---
+Automatic speaker recognition:
+
+Enrollment Speaker -> Feature Extraction -> Train mathematical model
+Unknown speaker -> Feature Extraction -> Compare against model -> Decision (accept/reject)
+
+Voice activity Decisions (VAD) -> extraction only in speech segments
+
+Short Term Features: 20-25ms 
+    Mel-frequency cepstral coefficients (MFCC)
+        25ms speech frame
+        window function (Hamming, Hanning)
+        Fourier power spectrum 
+        Log of spectrum
+        nonlinear Mel-space filter bank analysis (24ch)
+        Discrete cosine transform, retaining n values
+    Linear predictive coding (LPC)
+Feature normalization: retain values in modified acoustic conditions
+    cepstral mean subtraction
+    feature warmping
+    relative specra (RASTA) processing
+    quantile based cepstral normalization
+---
+
+Speaker modelling:
+Gaussian Mixture Model (GMM)
+    clusters data in an unsupervised way, with prob. density function of data
+        => speaker dependent PDF
+    evaluating PDF at diff. data points (test utterance) 
+        => similarity between a speaker GMM and unknown data
+    GMM is obtained for each speaker
+    Testing: utterance is compared against each GMM
+        most likely speaker is selected
+
+GMM-UBM 
+    UBM: universal background model
+    speaker verification:
+        claimed speaker model
+        universal background model:
+            represents speakers other than the target
+    speaker GMM is adapted/derived from UBM usin bayesian adaptation
+    LR test:
+        feature vector X
+        Ns speaker dependent GMM
+        N0 UBM
+        p(X|Ns)/p(X|N0) compare with threshold
+            accept or reject
+        Usually in log scale
+
+GMM-supervector:
+    concatenate GMM mean vector of Maximum a posteriori adapted speaker model
+    fixed dimensional recognition of a single utterance
+    
+GMM supervector SVMs
+    supervectors from training utterances -> positive
+    superfectors from impostor utterances -> negative
+
+GMM supervector Factor Analysis (FA)
+    describes high dimensional data vectors with low number of hidden variables
+    Linear Distortion Model:
+        4 components
+            speaker/channel/environment independent
+                from UBM, constant
+            speaker dependent
+            channel/environment dependent
+            residual
+    Classical MAP Adaptation
+    Eigenvoice Adaptation
+    Eigenchannel Adaptation
+    Joint FA
+    i-Vector
+---
+Linear Discriminant Analysis (LDA)
+    finds orthogonal directions in feature space that are more effective in discriminating classes
+
+NAP
+    feature space transformed using orthogonal projection in channel complementary space
+
+WCCN
+    minimizes false alarm and miss-error rates during SVM training
+---
+
+Performance evaluation:
+
+NIST SRE challenge
+
+Detection Error Tradeoff Curve (DET)
+    plot of FAR vs FRR
+        FAR: false acceptance rate
+        FRR: false rejection rate
+            
+    
