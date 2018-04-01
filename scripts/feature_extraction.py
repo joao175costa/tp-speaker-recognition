@@ -14,7 +14,35 @@ import numpy as np
 import pickle
 
 HDD_PATH = '/run/media/togepi/USB HDD/FEUP/VoxCeleb'
+WAV_PATH = '/run/media/togepi/USB HDD/FEUP/VoxCeleb/voxceleb1_wav/'
 FEATURES_PATH = '/run/media/togepi/USB HDD/FEUP/VoxCeleb/pickle_features_new/'
+
+def calculate_record_duration_speaker(speaker):
+    # calculates the number of minutes of recording for each speaker
+    wav_files = os.listdir(WAV_PATH + speaker)
+    total_seconds = 0
+    for file in wav_files:
+        filepath = WAV_PATH + speaker + '/' + file
+        wav = read_wav(filepath)
+        signal = wav[1]
+        ts = 1/wav[0]
+        signal_duration = len(signal) * ts
+        total_seconds += signal_duration
+    total_minutes = total_seconds/60
+    return total_minutes
+    
+def calculate_record_duration_all():
+    speakers = os.listdir(WAV_PATH)
+    list_of_duration = []
+    i=0
+    total_speakers = len(speakers)
+    for speaker in speakers:
+        i+=1
+        print(i,'/',total_speakers)
+        duration =  calculate_record_duration_speaker(speaker)
+        list_of_duration.append((speaker, duration))
+    list_of_duration.sort(key = lambda speaker: speaker[1], reverse=True)
+    return list_of_duration
 
 def pre_processing(wav_signal):
     processed = preemphasis(wav_signal)
