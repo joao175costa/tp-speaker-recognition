@@ -29,7 +29,6 @@ def load_duration():
     return duration
 
 def get_features_from_files(filelist):
-    f_matrix = []
     train_data = []
     test_data = []
     for file in filelist:
@@ -80,7 +79,7 @@ def get_speakers(n_speakers = 5, min_duration = 5):
 
 def train_gmm(feat_matrix, n_components = 1024, save=False):
     gmm = BayesianGaussianMixture(n_components = n_components, 
-                                  max_iter = 50,
+                                  max_iter = 10,
                                   covariance_type = 'diag',
                                   verbose=10,
                                   verbose_interval=1)
