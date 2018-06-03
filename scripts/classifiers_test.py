@@ -8,7 +8,7 @@ Created on Sat Apr 21 00:11:31 2018
 
 import VoxModule as vox
 
-loader = vox.VoxDataLoader()
+loader = vox.VoxDataLoader(n_speakers = 20, min_duration = 10)
 Xtrain = loader.train_features
 
 gmm_ubm = vox.GMM_UBM()
@@ -27,13 +27,13 @@ cm = confusion_matrix(ground_truth,pred)
 roc_curve = vox.roc(ground_truth, dec)
 vox.plot_roc(roc_curve)
 
-#%%
-from sklearn.svm import SVC
-svm_clf = SVC(probability = True)
-Xtrain_flat, ytrain_flat = loader.get_train_data()
-svm_clf.fit(Xtrain_flat, ytrain_flat)
-#%%
-svm_probs = vox.predict_log_proba(svm_clf, Xtest)
-#%%
-roc_svm = vox.roc(ground_truth, svm_probs)
-vox.plot_roc(roc_svm)
+##%%
+#from sklearn.svm import SVC
+#svm_clf = SVC(probability = True)
+#Xtrain_flat, ytrain_flat = loader.get_train_data()
+#svm_clf.fit(Xtrain_flat, ytrain_flat)
+##%%
+#svm_probs = vox.predict_log_proba(svm_clf, Xtest)
+##%%
+#roc_svm = vox.roc(ground_truth, svm_probs)
+#vox.plot_roc(roc_svm)

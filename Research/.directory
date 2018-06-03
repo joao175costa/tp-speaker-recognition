@@ -1,4 +1,7 @@
 [Dolphin]
-HeaderColumnWidths=412,72,103
-Timestamp=2018,2,13,19,20,20
+HeaderColumnWidths=824,72,103
+SortOrder=1
+SortRole=modificationtime
+Timestamp=2018,5,29,11,11,48
 Version=4
+ViewMode=1
