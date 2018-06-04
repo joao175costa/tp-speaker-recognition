@@ -14,6 +14,8 @@ with open(vox.GIT_PATH + 'loader_31_05.pkl', 'rb') as f:
 with open(vox.GIT_PATH + 'gmmubm_31_05.pkl', 'rb') as f:
     gmm_ubm_model = pickle.load(f)
     
-jfa = vox.JFA()
-jfa.load_GMM_UBM(gmm_ubm_model)
-jfa.train_V(feat_loader.train_features)
+iv = vox.iVectors()
+iv.load_GMM_UBM(gmm_ubm_model)
+iv.train_T(feat_loader.train_features)
+
+T = iv.T_matrix

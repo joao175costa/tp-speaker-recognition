@@ -7,6 +7,7 @@ Created on Tue Apr 17 14:43:18 2018
 """
 import itertools
 import operator
+import shelve
 import pickle as pkl
 import numpy as np
 from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
@@ -206,24 +207,18 @@ class GMM_UBM:
         #predictions_norm = predictions_exp/predictions_exp.sum(axis=1, keepdims=True)
         return predictions
 
-class JFA:
+class iVectors:
     def __init__(self, n_iter = 20, 
-                 n_speaker_factors = 300, 
-                 n_channel_factors = 200, 
-                 n_residual_factors = 20000):
+                 n_speaker_factors = 400):
         self.n_iter = n_iter
         self.n_speaker_factors = n_speaker_factors
-        self.n_channel_factors = n_channel_factors
-        self.n_residual_factors = n_residual_factors
         
         #placeholders
         self.gmm_ubm_model = None
         self.UBM_supervector = None
         self.UBM_supercovariance = None
         self.GMM_supervectors = {}
-        self.V_matrix = None
-        self.U_matrix = None
-        self.D_matrix = None
+        self.T_matrix = None
 
     def load_GMM_UBM(self, GMM_UBM_model):
         self.gmm_ubm_model = GMM_UBM_model
@@ -243,8 +238,7 @@ class JFA:
         means = gmm_model.means_
         return means.flatten()
     
-    def train_V(self, X):
-        supervector_dim = len(self.UBM_supervector)
+    def train_T(self, X):
         ubm = self.gmm_ubm_model.ubm
         ubm_means = ubm.means_
         n_components = ubm.n_components
@@ -252,75 +246,81 @@ class JFA:
         
         # initialization of matrices
         # V has random initialization
-        self.V_matrix = np.random.rand(supervector_dim, self.n_speaker_factors)
+        self.T_matrix = np.random.rand(n_components*n_feats, self.n_speaker_factors)
         
-        speaker_stats = {}
+        speaker_stats = shelve.open(GIT_PATH + 'shelf_ivector.she')
         
         # calculation of statistics for each speaker using UBM posteriors
+        i=0
         for speaker in sorted(X):
             print(speaker)
-            speaker_stats[speaker]={}
-            stats_dict = speaker_stats[speaker]
-            
-            X_speaker = X[speaker]
-            all_obs = flatten_speaker_feature_matrix(X_speaker)
-            all_obs_center = all_obs - ubm_means[:,np.newaxis]
-            posteriors = ubm.predict_proba(all_obs)
-            n_frames = len(all_obs)
-            
-            # 0th order statistics
-            N_c_s = posteriors.sum(axis = 0)
-            
-            # 1st order statistics
-            F_c_s = np.zeros((n_components,n_feats))
-            for c in range(n_components):
-                centered_obs = all_obs_center[c]
-                post_weights = posteriors[:,c]
-                post_Y = centered_obs * post_weights[:, np.newaxis]
-                F_c_s[c] = post_Y.sum(axis=0)
-            
-            # 2nd order statistics
-            S_c_s = np.zeros((n_components, n_feats))
-            for c in range(n_components):
-                centered = all_obs_center[c]
-                weights = posteriors[:,c]
-                sum_yy = 0
-                for i in range(n_frames):
-                    weight = weights[i]
-                    Y = centered[i]
-                    sum_yy += weight * Y * Y
-                S_c_s[c] = sum_yy
-            print('statistics calculated')
-            
-            # expansion into matrices
-            NN_s = np.zeros((n_components*n_feats))
-            for i in range(n_components*n_feats):
-                NN_s[i] = N_c_s[i//n_feats]
-            NN_s = np.diag(NN_s)
-            FF_s = F_c_s.flatten()
-            SS_s = np.diag(S_c_s.flatten())
-            print('stats expanded')
-            stats_dict['Nc'] = N_c_s
-            stats_dict['NN'] = NN_s
-            stats_dict['FF'] = FF_s
-            stats_dict['SS'] = SS_s
+            for utt in X[speaker]:
+                print(i)
+                
+                X_speaker = utt
+                #all_obs = flatten_speaker_feature_matrix(X_speaker)
+                all_obs = X_speaker
+                all_obs_center = all_obs - ubm_means[:,np.newaxis]
+                posteriors = ubm.predict_proba(all_obs)
+                n_frames = len(all_obs)
+                
+                # 0th order statistics
+                N_c_s = posteriors.sum(axis = 0)
+                
+                # 1st order statistics
+                F_c_s = np.zeros((n_components,n_feats))
+                for c in range(n_components):
+                    centered_obs = all_obs_center[c]
+                    post_weights = posteriors[:,c]
+                    post_Y = centered_obs * post_weights[:, np.newaxis]
+                    F_c_s[c] = post_Y.sum(axis=0)
+                
+                # 2nd order statistics
+                S_c_s = np.zeros((n_components, n_feats))
+                for c in range(n_components):
+                    centered = all_obs_center[c]
+                    weights = posteriors[:,c]
+                    sum_yy = 0
+                    for j in range(n_frames):
+                        weight = weights[j]
+                        Y = centered[j]
+                        sum_yy += weight * Y * Y
+                    S_c_s[c] = sum_yy
+                print('statistics calculated')
+                
+                # expansion into matrices
+                NN_s = np.zeros((n_components*n_feats))
+                for j in range(n_components*n_feats):
+                    NN_s[j] = N_c_s[j//n_feats]
+                #NN_s = np.diag(NN_s)
+                FF_s = F_c_s.flatten()
+                SS_s = S_c_s.flatten()
+                #SS_s = np.diag(SS_s)
+                print('stats expanded')
+                speaker_stats[str(i)+'Nc'] = N_c_s
+                speaker_stats[str(i)+'NN'] = NN_s
+                speaker_stats[str(i)+'FF'] = FF_s
+                speaker_stats[str(i)+'SS'] = SS_s
+                i+=1
+                
+        sigma = self.UBM_supercovariance
         
         for iteration in range(self.n_iter):
             print('iteration ', iteration)
             print('estimating distribution')
-            for speaker in speaker_stats:
-                NN_s = speaker_stats[speaker]['NN']
-                FF_s = speaker_stats[speaker]['FF']
-                inv_ubm_cov = np.diag(1/np.diag(self.UBM_supercovariance))
-                inv_nn = np.diag(np.diag(inv_ubm_cov) * np.diag(NN_s))
-                inv_nn_V = np.diag(inv_nn)[:,None] * self.V_matrix
-                lv_s = np.eye(self.n_speaker_factors) + self.V_matrix.T @ inv_nn_V
+            for i in speaker_stats:
+                NN_s = speaker_stats[i+'NN']
+                FF_s = speaker_stats[i+'FF']
+                inv_ubm_cov = np.diag(1/np.diag(sigma))
+                inv_nn = np.diag(np.diag(inv_ubm_cov) * NN_s)
+                inv_nn_V = np.diag(inv_nn)[:,None] * self.T_matrix
+                lv_s = np.eye(self.n_speaker_factors) + self.T_matrix.T @ inv_nn_V
                 
                 # covariance and mean of distribution
                 cov_dist = np.linalg.inv(lv_s)
-                mean_dist = cov_dist @ self.V_matrix.T @ inv_ubm_cov @ FF_s
-                stats_dict['cov_dist'] = cov_dist
-                stats_dict['mean_dist'] = mean_dist
+                mean_dist = cov_dist @ self.T_matrix.T @ inv_ubm_cov @ FF_s
+                speaker_stats[i+'cov_dist'] = cov_dist
+                speaker_stats[i+'mean_dist'] = mean_dist
         
             print('Calculating speaker wide statistics')
             Nc = 0
@@ -328,52 +328,44 @@ class JFA:
             C = 0
             NN = 0
             sum_SS = 0
-            for speaker in speaker_stats:
-                speaker_nc = speaker_stats[speaker]['Nc']
-                speaker_cov = speaker_stats[speaker]['cov_dist']
-                speaker_FF = speaker_stats[speaker]['FF']
-                speaker_mean = speaker_stats[speaker]['mean_dist']
-                speaker_NN = speaker_stats[speaker]['NN']
-                speaker_SS = speaker_stats[speaker]['SS']
+            for i in speaker_stats:
+                speaker_nc = speaker_stats[i+'Nc']
+                speaker_cov = speaker_stats[i+'cov_dist']
+                speaker_FF = speaker_stats[i+'FF']
+                speaker_mean = speaker_stats[i+'mean_dist']
+                speaker_NN = speaker_stats[i+'NN']
+                speaker_SS = speaker_stats[i+'SS']
                 
                 Nc += speaker_nc
                 Ac += speaker_nc[:,None,None] * speaker_cov
                 C += speaker_FF[:,None] @ speaker_mean[:,None].T
-                NN += np.diag(speaker_NN)
-                sum_SS += np.diag(speaker_SS)
+                NN += speaker_NN
+                sum_SS += speaker_SS
             NN = np.diag(NN)
             sum_SS = np.diag(sum_SS)
             
             print('re-estimating V')
-            V = np.zeros((n_components,n_feats))
+            newT = np.zeros((n_components*n_feats,self.n_speaker_factors))
             for c in range(n_components):
                 block = np.linalg.inv(Ac[c]) @ C[c*n_feats:(c+1)*n_feats].T
-                V[c*n_feats:(c+1)*n_feats] = block.T
-            print('diff', np.sum(self.V_matrix - V))
-            self.V_matrix = V
+                newT[c*n_feats:(c+1)*n_feats] = block.T
+            print('diff', np.sum(self.T_matrix - newT))
+            self.T_matrix = newT
             
             print('re-estimating Sigma')
             inv_NN = 1/np.diag(NN)
-            CV = np.array([C[i]*self.V_matrix[i] for i in range(n_components*n_feats)])
+            CV = np.array([C[i]*self.T_matrix[i] for i in range(n_components*n_feats)])
             CV = np.sum(CV, axis=1)
             SS_dif_diag = sum_SS - CV
             new_cv = np.diag(inv_NN * SS_dif_diag)
-            self.UBM_supercovariance = new_cv
-            
+            sigma = new_cv
+        
+        speaker_stats.close()
         return self
-    
-    def train_U(self):
-        return 0
-    
-    def train_D(self):
-        return 0
     
     def train(self):
         return 0
         
-class iVectors:
-    def __init__(self, n_iter = 20):
-        self.n_iter = n_iter
 
 def true_labels(X):
     true_labels = []
