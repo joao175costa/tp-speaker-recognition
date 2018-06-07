@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sun Jun  3 01:55:24 2018
-
 @author: togepi
 """
 
@@ -52,4 +51,8 @@ with open(vox.GIT_PATH + 'results_6_6.pkl','rb') as f:
 list_it = [(256,5),(256,10),(256,20)]
 list_c = [(32,10),(64,10),(128,10),(256,10)]
 for r in list_c:
+<<<<<<< Updated upstream
     vox.plot_det(rocs[r], r)
+=======
+vox.plot_det(rocs[r], r)
+>>>>>>> Stashed changes
