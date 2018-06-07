@@ -14,11 +14,12 @@ from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
 from sklearn.preprocessing import normalize
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
+import matplotlib
 from sklearn.metrics import roc_curve, auc
 from sklearn.preprocessing import label_binarize
 from scipy import interp
 
-GIT_PATH = '/home/togepi/feup-projects/tp-speaker-recognition/'
+GIT_PATH = '/home/togepi/feup/tp-speaker-recognition/'
 HDD_PATH = '/run/media/togepi/USB HDD/FEUP/VoxCeleb/'
 FEATURES_PATH = '/run/media/togepi/USB HDD/FEUP/VoxCeleb/pickle_features_new/'
 
@@ -46,12 +47,13 @@ def flatten_full_feature_matrix(featureData):
     return f_matrix, labels
 
 class VoxDataLoader:
-    def __init__(self, n_speakers=5, min_duration=5):
+    def __init__(self, n_speakers=10, min_duration=5):
         self.n_speakers = n_speakers
         self.min_duration = min_duration
         self.features = None
         self.train_features = None
         self.test_features = None
+        self.imposter_features = None
 
         self.load_features()
         self.split()
@@ -71,6 +73,7 @@ class VoxDataLoader:
         # is selected. if random=True, this population is random (may lead to bias)
         # Otherwise, the n speakers with more samples are selected
         self.features = {}
+        self.imposter_features = {}
 
         speaker_duration = self.load_duration()
 
@@ -78,12 +81,18 @@ class VoxDataLoader:
                         lambda x: x[1] > self.min_duration) if val]
 
         selected_speakers = min_speakers[0]
+        imposter_speakers = selected_speakers[-self.n_speakers-5:-self.n_speakers]
         selected_speakers = selected_speakers[-self.n_speakers:]
+ 
 
         # create the feature matrix for training
         for auth in sorted(np.array(selected_speakers)[:,0]):
             auth_pkl = auth + '.pkl'
             self.features[auth] = self.load_user_data(auth_pkl)
+            
+        for auth in sorted(np.array(imposter_speakers)[:,0]):
+            auth_pkl = auth+'.pkl'
+            self.imposter_features[auth] = self.load_user_data(auth_pkl)
             
     def split(self):
         train_data = {}
@@ -184,7 +193,6 @@ class GMM_UBM:
         for speaker in X:
             for utt in X[speaker]:
                 scores = self.predict_utt(utt)
-                del scores['UBM']
                 best_label = max(scores.items(), key=operator.itemgetter(1))[0]
                 predictions.append(best_label)
         return np.array(predictions)
@@ -194,8 +202,9 @@ class GMM_UBM:
         for speaker in X:
             for utt in X[speaker]:
                 scores = self.predict_utt(utt)
-                del scores['UBM']
                 scores_utt = []
+                scores_utt.append(scores['UBM'])
+                del scores['UBM']
                 for classes in sorted(scores):
                     scores_utt.append(scores[classes])
                 predictions.append(scores_utt)
@@ -213,11 +222,18 @@ class iVectors:
         self.n_iter = n_iter
         self.n_speaker_factors = n_speaker_factors
         
+        self.shelf_name = 'shelf_ivector.shelf'
+        
         #placeholders
         self.gmm_ubm_model = None
         self.UBM_supervector = None
         self.UBM_supercovariance = None
         self.GMM_supervectors = {}
+        
+        self.n_comp = None
+        self.n_feats = None
+        self.CF = None
+        
         self.T_matrix = None
 
     def load_GMM_UBM(self, GMM_UBM_model):
@@ -227,11 +243,17 @@ class iVectors:
             self.GMM_supervectors[speaker] = self.supervectorize(self.gmm_ubm_model.adapted_gmm[speaker])
         ubm_cov = self.gmm_ubm_model.ubm.covariances_
         n_comp = np.shape(ubm_cov)[0]
+        self.n_comp = n_comp
         n_feats = np.shape(ubm_cov)[1]
+        self.n_feats = n_feats
         CF = np.prod(np.shape(ubm_cov))
+        self.CF = CF
         self.UBM_supercovariance = np.zeros((CF,CF))
         for i in range(CF):
             self.UBM_supercovariance[i,i] = ubm_cov[i//n_comp, i%n_feats]
+            
+        self.T_matrix = np.random.rand(self.CF, self.n_speaker_factors)
+        
         return self
             
     def supervectorize(self, gmm_model):
@@ -239,16 +261,26 @@ class iVectors:
         return means.flatten()
     
     def train_T(self, X):
+        self.boot_stats_T(X) #saves to shelf
+        sigma = self.UBM_supercovariance
+        T = self.T_matrix
+        
+        for iteration in range(self.n_iter):
+            print('iteration ', iteration)
+            # T matrix is updated within class
+            T, sigma = self.iterate_T(T, sigma)
+        
+        self.T_matrix = T
+        
+        return self
+    
+    def boot_stats_T(self, X):
+        speaker_stats = shelve.open(GIT_PATH + self.shelf_name)
+        
         ubm = self.gmm_ubm_model.ubm
         ubm_means = ubm.means_
-        n_components = ubm.n_components
-        n_feats = np.shape(ubm.means_)[1]
-        
-        # initialization of matrices
-        # V has random initialization
-        self.T_matrix = np.random.rand(n_components*n_feats, self.n_speaker_factors)
-        
-        speaker_stats = shelve.open(GIT_PATH + 'shelf_ivector.she')
+        n_components = self.n_comp
+        n_feats = self.n_feats
         
         # calculation of statistics for each speaker using UBM posteriors
         i=0
@@ -303,22 +335,30 @@ class iVectors:
                 speaker_stats[str(i)+'SS'] = SS_s
                 i+=1
                 
-        sigma = self.UBM_supercovariance
+        speaker_stats['n_utt'] = i        
+        speaker_stats.close()
         
-        for iteration in range(self.n_iter):
-            print('iteration ', iteration)
+    def iterate_T(self, oldT, oldCV):
+        speaker_stats = shelve.open(GIT_PATH + self.shelf_name)
+        try:
+            n_components = self.n_comp
+            n_feats = self.n_feats
+            CF = self.CF
+            n_utt = speaker_stats['n_utt']
+            
             print('estimating distribution')
-            for i in speaker_stats:
+            for i in range(n_utt):
+                i=str(i)
                 NN_s = speaker_stats[i+'NN']
                 FF_s = speaker_stats[i+'FF']
-                inv_ubm_cov = np.diag(1/np.diag(sigma))
-                inv_nn = np.diag(np.diag(inv_ubm_cov) * NN_s)
-                inv_nn_V = np.diag(inv_nn)[:,None] * self.T_matrix
-                lv_s = np.eye(self.n_speaker_factors) + self.T_matrix.T @ inv_nn_V
+                inv_ubm_cov = 1/np.diag(oldCV)
+                inv_nn = inv_ubm_cov * NN_s
+                inv_nn_T = inv_nn[:,None] * oldT
+                lv_s = np.eye(self.n_speaker_factors) + oldT.T @ inv_nn_T
                 
                 # covariance and mean of distribution
                 cov_dist = np.linalg.inv(lv_s)
-                mean_dist = cov_dist @ self.T_matrix.T @ inv_ubm_cov @ FF_s
+                mean_dist = cov_dist @ oldT.T @ (inv_ubm_cov * FF_s)
                 speaker_stats[i+'cov_dist'] = cov_dist
                 speaker_stats[i+'mean_dist'] = mean_dist
         
@@ -328,7 +368,8 @@ class iVectors:
             C = 0
             NN = 0
             sum_SS = 0
-            for i in speaker_stats:
+            for i in range(n_utt):
+                i=str(i)
                 speaker_nc = speaker_stats[i+'Nc']
                 speaker_cov = speaker_stats[i+'cov_dist']
                 speaker_FF = speaker_stats[i+'FF']
@@ -342,30 +383,27 @@ class iVectors:
                 NN += speaker_NN
                 sum_SS += speaker_SS
             NN = np.diag(NN)
-            sum_SS = np.diag(sum_SS)
+            sum_SS = sum_SS
             
             print('re-estimating V')
-            newT = np.zeros((n_components*n_feats,self.n_speaker_factors))
+            newT = np.zeros((CF,self.n_speaker_factors))
             for c in range(n_components):
                 block = np.linalg.inv(Ac[c]) @ C[c*n_feats:(c+1)*n_feats].T
                 newT[c*n_feats:(c+1)*n_feats] = block.T
             print('diff', np.sum(self.T_matrix - newT))
-            self.T_matrix = newT
             
             print('re-estimating Sigma')
             inv_NN = 1/np.diag(NN)
-            CV = np.array([C[i]*self.T_matrix[i] for i in range(n_components*n_feats)])
+            CV = np.array([C[i]*self.T_matrix[i] for i in range(CF)])
             CV = np.sum(CV, axis=1)
             SS_dif_diag = sum_SS - CV
-            new_cv = np.diag(inv_NN * SS_dif_diag)
-            sigma = new_cv
-        
-        speaker_stats.close()
-        return self
-    
-    def train(self):
-        return 0
-        
+            newCV = np.diag(inv_NN * SS_dif_diag)
+                        
+            speaker_stats.close()
+            return newT, newCV
+        except:
+            speaker_stats.close()
+
 
 def true_labels(X):
     true_labels = []
@@ -430,7 +468,6 @@ def plot_roc(roc_data, user = 'micro'):
     tpr = roc_data[1]
     roc_auc = roc_data[2]
     
-    plt.figure()
     lw = 2
     plt.plot(fpr[user], tpr[user], color='darkorange',
              lw=lw, label='ROC curve (area = %0.8f)' % roc_auc[user])
@@ -441,5 +478,30 @@ def plot_roc(roc_data, user = 'micro'):
     plt.ylabel('True Positive Rate')
     plt.title('Receiver operating characteristic ('+str(user)+')')
     plt.legend(loc="lower right")
+    plt.show()
+    
+def plot_det(roc_data, keys, user='micro'):
+    fpr = roc_data[0]
+    tpr = roc_data[1]
+
+    lw = 2
+    plt.plot(fpr[user]*100, 100-tpr[user]*100,
+             lw=lw, 
+             label='iter='+str(keys[1])+', comp='+str(keys[0]))
+    plt.xscale('log')
+    plt.yscale('log')
+    
+    ticks = [5,10,15,20,25,30,35,40,45,50]
+    plt.gca().get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    plt.gca().get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    plt.gca().set_xticks(ticks)
+    plt.gca().set_yticks(ticks)
+    plt.xlim([10, 50])
+    plt.ylim([10, 50])
+    plt.title('DET Curves')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('False Negative Rate')
+    plt.grid(True, linestyle='--')
+    plt.legend()
     plt.show()
     
