@@ -19,7 +19,7 @@ from sklearn.metrics import roc_curve, auc
 from sklearn.preprocessing import label_binarize
 from scipy import interp
 
-GIT_PATH = '/home/togepi/feup/tp-speaker-recognition/'
+GIT_PATH = '/home/togepi/feup-projects/tp-speaker-recognition/'
 HDD_PATH = '/run/media/togepi/USB HDD/FEUP/VoxCeleb/'
 FEATURES_PATH = '/run/media/togepi/USB HDD/FEUP/VoxCeleb/pickle_features_new/'
 
@@ -480,28 +480,29 @@ def plot_roc(roc_data, user = 'micro'):
     plt.legend(loc="lower right")
     plt.show()
     
-def plot_det(roc_data, keys, user='micro'):
+def plot_det(roc_data,eer_data, keys, user='macro'):
     fpr = roc_data[0]
     tpr = roc_data[1]
 
     lw = 2
     plt.plot(fpr[user]*100, 100-tpr[user]*100,
              lw=lw, 
-             label='iter='+str(keys[1])+', comp='+str(keys[0]))
-    plt.xscale('log')
-    plt.yscale('log')
+             label='C='+str(keys[0]))
+    plt.plot(eer_data, eer_data, 'rx')
+    plt.gca().loglog()
     
-    ticks = [5,10,15,20,25,30,35,40,45,50]
+    major = matplotlib.ticker.MultipleLocator(5)
+    plt.gca().get_xaxis().set_major_locator(major)
+    plt.gca().get_yaxis().set_major_locator(major)
     plt.gca().get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
     plt.gca().get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
-    plt.gca().set_xticks(ticks)
-    plt.gca().set_yticks(ticks)
-    plt.xlim([10, 50])
-    plt.ylim([10, 50])
+    #plt.gca().set_xticks(ticks)
+    #plt.gca().set_yticks(ticks)
+    plt.xlim([10, 60])
+    plt.ylim([10, 60])
     plt.title('DET Curves')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('False Negative Rate')
+    plt.xlabel('False Positive Rate (%)')
+    plt.ylabel('False Negative Rate (%)')
     plt.grid(True, linestyle='--')
     plt.legend()
-    plt.show()
     
